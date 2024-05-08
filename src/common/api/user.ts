@@ -9,7 +9,7 @@ export const getGitHubUserInfo = (token: string) => {
   return request({
     url: '/user',
     method: 'GET',
-    headers: { Authorization: `token ${token}` }
+    headers: { Authorization: `Bearer ${token}` }
   })
 }
 
@@ -18,6 +18,6 @@ export const starredRepo = (repo: string = PICX_REPO_NAME) => {
     url: `/user/starred/${repo}`,
     method: 'PUT',
     data: {},
-    noShowErrorMsg: true
+    noShowErrMsg: true
   })
 }

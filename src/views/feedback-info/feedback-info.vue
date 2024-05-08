@@ -28,10 +28,7 @@
     <div class="help-info-item" style="margin-bottom: 2rem">🎁 {{ $t('feedback.text_3') }}</div>
 
     <div class="help-info-item img">
-      <el-image
-        style="width: 300rem"
-        src="https://cdn.staticaly.com/gh/XPoet/image-hosting@master/common/appreciation.webp"
-      />
+      <el-image style="width: 300rem" src="https://xpoet.cn/images/admire-code-wechat.webp" />
     </div>
 
     <div class="help-info-item red-text">

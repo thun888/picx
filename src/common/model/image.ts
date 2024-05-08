@@ -11,6 +11,8 @@ export interface UploadedImageModel {
   size: number
   deleting: boolean
   checked: boolean
+  active?: boolean
+  deployed?: boolean
 }
 
 /**
@@ -32,17 +34,16 @@ export interface UploadImageModel {
   }
 
   filename: {
-    hash: string // 哈希值
-    suffix: string // 后缀
     name: string
-    final: string
-    initName: string
-    newName: string
-    isRename: boolean
+    initName: string // 初始名称
+    final: string // 最终名称
+    suffix: string // 后缀
+    isRename: boolean // 是否重命名
+    newName: string // 新名称
     isAddHash: boolean // 是否添加哈希值
-    isPrefixNaming: boolean // 是否前缀命名
-    prefixName: string // 前缀命名值
-    isTimestampNaming: boolean // 是否时间戳命名
+    hash: string // 哈希值
+    isAddPrefix: boolean // 是否添加前缀
+    prefix: string // 前缀
   }
 
   // 上传前的状态
@@ -117,4 +118,20 @@ export interface ImageLinkRuleModel {
 export interface ImageLinkFormatModel {
   name: string
   format: string
+}
+
+/**
+ * 图片链接类型名称枚举
+ */
+export enum ImageLinkTypeEnum {
+  // eslint-disable-next-line no-unused-vars
+  GitHub = 'GitHub',
+  // eslint-disable-next-line no-unused-vars
+  GitHubPages = 'GitHub Pages',
+  // eslint-disable-next-line no-unused-vars
+  jsDelivr = 'jsDelivr',
+  // eslint-disable-next-line no-unused-vars
+  ChinaJsDelivr = 'ChinaJsDelivr',
+  // eslint-disable-next-line no-unused-vars
+  Statically = 'Statically'
 }

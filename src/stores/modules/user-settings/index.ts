@@ -3,55 +3,65 @@ import {
   CompressEncoderEnum,
   ElementPlusSizeEnum,
   ImageLinkRuleModel,
+  ImageLinkTypeEnum,
   LanguageEnum,
   ThemeModeEnum,
   UserSettingsModel,
   WatermarkPositionEnum
 } from '@/common/model'
-import { deepAssignObject, getLocal, getUuid } from '@/utils'
-import UserConfigInfoStateTypes from '@/stores/modules/user-config-info/types'
+import { deepAssignObject, getLocal, getSession, getUuid, setLocal, setSession } from '@/utils'
 import RootStateTypes from '@/stores/types'
-import UserSettingsStateTypes from '@/stores/modules/user-settings/types'
-import { LS_PICX_SETTINGS } from '@/common/constant'
+import UserSettingsStateTypes, {
+  GlobalSettingsModel,
+  ImgLinkRuleActionsEnum
+} from '@/stores/modules/user-settings/types'
+import { LS_SETTINGS, SS_GLOBAL_SETTINGS } from '@/common/constant'
+import { imgLinkRuleVerification } from '@/stores/modules/user-settings/utils'
+import i18n from '@/plugins/vue/i18n'
 
 const initSettings: UserSettingsModel = {
   imageName: {
-    autoAddHash: true,
-    autoTimestampNaming: false,
-    prefixNaming: { enable: false, prefix: '' }
+    enableHash: true,
+    addPrefix: { enable: false, prefix: '' }
   },
   compress: {
     enable: true,
     encoder: CompressEncoderEnum.webP
   },
-  theme: {
-    mode: ThemeModeEnum.system
-  },
-  elementPlusSize: ElementPlusSizeEnum.default,
   imageLinkType: {
-    selected: 'Staticaly',
-    presetList: [
-      {
+    selected: ImageLinkTypeEnum.GitHub,
+    presetList: {
+      // GitHubPages
+      [`${ImageLinkTypeEnum.GitHubPages}`]: {
         id: getUuid(),
-        name: 'Staticaly',
-        rule: 'https://cdn.staticaly.com/gh/{{owner}}/{{repo}}@{{branch}}/{{path}}'
+        name: ImageLinkTypeEnum.GitHubPages,
+        rule: 'https://{{owner}}.github.io/{{repo}}/{{path}}'
       },
-      {
+      // GitHub
+      [`${ImageLinkTypeEnum.GitHub}`]: {
         id: getUuid(),
-        name: 'ChinaJsDelivr',
-        rule: 'https://jsd.cdn.zzko.cn/gh/{{owner}}/{{repo}}@{{branch}}/{{path}}'
+        name: ImageLinkTypeEnum.GitHub,
+        rule: 'https://github.com/{{owner}}/{{repo}}/raw/{{branch}}/{{path}}'
       },
-      {
+      // jsDelivr
+      [`${ImageLinkTypeEnum.jsDelivr}`]: {
         id: getUuid(),
-        name: 'jsDelivr',
+        name: ImageLinkTypeEnum.jsDelivr,
         rule: 'https://cdn.jsdelivr.net/gh/{{owner}}/{{repo}}@{{branch}}/{{path}}'
       },
-      {
+      // Statically
+      [`${ImageLinkTypeEnum.Statically}`]: {
         id: getUuid(),
-        name: 'GitHub',
-        rule: 'https://github.com/{{owner}}/{{repo}}/raw/{{branch}}/{{path}}'
+        name: ImageLinkTypeEnum.Statically,
+        rule: 'https://cdn.statically.io/gh/{{owner}}/{{repo}}@{{branch}}/{{path}}'
+      },
+      // ChinaJsDelivr
+      [`${ImageLinkTypeEnum.ChinaJsDelivr}`]: {
+        id: getUuid(),
+        name: ImageLinkTypeEnum.ChinaJsDelivr,
+        rule: 'https://jsd.cdn.zzko.cn/gh/{{owner}}/{{repo}}@{{branch}}/{{path}}'
       }
-    ]
+    }
   },
   imageLinkFormat: {
     enable: false,
@@ -80,122 +90,109 @@ const initSettings: UserSettingsModel = {
     textColor: '#FFFFFF',
     opacity: 0.5
   },
-  language: LanguageEnum.zhCN
+  showAnnouncement: true
 }
 
 const initUserSettings = (): UserSettingsModel => {
-  const LSSettings = getLocal(LS_PICX_SETTINGS)
+  const LSSettings = getLocal(LS_SETTINGS)
   if (LSSettings) {
     deepAssignObject(initSettings, LSSettings)
   }
   return initSettings
 }
 
-const ruleVerification = (rule: ImageLinkRuleModel, type: 'add' | 'edit', callback: any) => {
-  const typeTxt = type === 'add' ? '添加' : '编辑'
-  const tmpList = []
-
-  if (!rule.rule.includes('{{owner}}')) {
-    tmpList.push('{{owner}}')
+const initGlobalSettings = (): GlobalSettingsModel => {
+  const globalSettings: GlobalSettingsModel = {
+    showAnnouncement: true,
+    folded: false,
+    elementPlusSize: ElementPlusSizeEnum.default,
+    language: LanguageEnum.zhCN,
+    languageToggleTip: true,
+    theme: ThemeModeEnum.system,
+    useCloudSettings: false
   }
 
-  if (!rule.rule.includes('{{repo}}')) {
-    tmpList.push('{{repo}}')
+  const SSSettings = getSession(SS_GLOBAL_SETTINGS)
+  if (SSSettings) {
+    deepAssignObject(globalSettings, SSSettings)
   }
-
-  if (!rule.rule.includes('{{branch}}')) {
-    tmpList.push('{{branch}}')
-  }
-
-  if (!tmpList.length) {
-    callback(true)
-    return
-  }
-
-  if (rule.rule.includes('{{path}}')) {
-    let confirmTxt = `图片链接规则缺少 ${tmpList.join('、')}，是否确认${typeTxt}？`
-
-    if (type === 'edit') {
-      confirmTxt = `注意：当前编辑的图片链接规则缺少 ${tmpList.join('、')}`
-    }
-
-    ElMessageBox.confirm(confirmTxt, `${typeTxt}提示`, {
-      type: 'warning',
-      showClose: type === 'add',
-      showCancelButton: type === 'add'
-    })
-      .then(() => {
-        callback(true)
-      })
-      .catch(() => {
-        console.log(`取消${typeTxt}`)
-        callback(false)
-      })
-  } else {
-    ElMessage.error(`${typeTxt}失败，图片链接规则必须包含 {{path}}`)
-  }
+  return globalSettings
 }
 
 const userSettingsModule: Module<UserSettingsStateTypes, RootStateTypes> = {
   state: {
-    userSettings: initUserSettings()
+    userSettings: initUserSettings(),
+    cloudSettings: null,
+    globalSettings: initGlobalSettings()
   },
 
   actions: {
-    // 设置
-    SET_USER_SETTINGS({ state, dispatch }, configInfo: UserConfigInfoStateTypes) {
+    // 赋值用户设置信息
+    SET_USER_SETTINGS({ state, dispatch }, settingsInfo: UserSettingsModel) {
       // eslint-disable-next-line no-restricted-syntax
-      for (const key in configInfo) {
-        // eslint-disable-next-line no-prototype-builtins
-        if (state.userSettings.hasOwnProperty(key)) {
+      for (const key in settingsInfo) {
+        if (Object.hasOwn(state.userSettings, key)) {
           // @ts-ignore
-          state.userSettings[key] = configInfo[key]
+          state.userSettings[key] = settingsInfo[key]
         }
       }
       dispatch('USER_SETTINGS_PERSIST')
     },
 
+    // 赋值云端仓库设置信息
+    SET_CLOUD_SETTINGS({ state }, cloudSettings: UserSettingsStateTypes['cloudSettings']) {
+      state.cloudSettings = cloudSettings
+    },
+
+    // 赋值全局设置信息
+    SET_GLOBAL_SETTINGS({ state }, globalSettings: UserSettingsStateTypes['globalSettings']) {
+      // eslint-disable-next-line guard-for-in,no-restricted-syntax
+      for (const key in globalSettings) {
+        // @ts-ignore
+        state.globalSettings[key] = globalSettings[key]
+      }
+      setSession(SS_GLOBAL_SETTINGS, state.globalSettings)
+    },
+
     // 图片链接类型 - 增加规则
-    ADD_IMAGE_LINK_TYPE_RULE({ state, dispatch }, rule: ImageLinkRuleModel) {
-      const list = state.userSettings.imageLinkType.presetList
-      if (!list.some((x) => x.name === rule.name)) {
-        ruleVerification(rule, 'add', (e: boolean) => {
+    ADD_IMAGE_LINK_TYPE_RULE({ state, dispatch }, { rule }) {
+      const ruleObjs = state.userSettings.imageLinkType.presetList
+      if (!Object.hasOwn(ruleObjs, rule.name)) {
+        imgLinkRuleVerification(rule, ImgLinkRuleActionsEnum.add, (e: boolean) => {
           if (e) {
-            state.userSettings.imageLinkType.presetList.push(rule)
+            state.userSettings.imageLinkType.presetList[rule.name] = rule
             dispatch('USER_SETTINGS_PERSIST')
           }
         })
       } else {
-        ElMessage.error('添加失败，该图片链接规则规则已存在')
+        ElMessage.error(i18n.global.t('settings_page.link_rule.error_msg_1'))
       }
     },
 
     // 图片链接类型 - 修改规则
-    UPDATE_IMAGE_LINK_TYPE_RULE({ state, dispatch }, rule: ImageLinkRuleModel) {
-      ruleVerification(rule, 'edit', (e: boolean) => {
+    UPDATE_IMAGE_LINK_TYPE_RULE({ state, dispatch }, { rule }) {
+      imgLinkRuleVerification(rule, ImgLinkRuleActionsEnum.edit, (e: boolean) => {
         if (e) {
-          const tgt = state.userSettings.imageLinkType.presetList.find((x) => x.id === rule.id)
-          if (tgt) {
-            tgt.rule = rule.rule
-            dispatch('USER_SETTINGS_PERSIST')
-          }
+          state.userSettings.imageLinkType.presetList[rule.name].rule = rule.rule
+          dispatch('USER_SETTINGS_PERSIST')
         }
       })
     },
 
     // 图片链接类型 - 删除规则
-    DEL_IMAGE_LINK_TYPE_RULE({ state, dispatch }, id: string) {
-      const list = state.userSettings.imageLinkType.presetList
-      list.splice(
-        list.findIndex((x) => x.id === id),
-        1
-      )
+    DEL_IMAGE_LINK_TYPE_RULE({ state, dispatch }, rule: ImageLinkRuleModel) {
+      delete state.userSettings.imageLinkType.presetList[rule.name]
       dispatch('USER_SETTINGS_PERSIST')
     },
 
-    // 持久化
+    // 持久化用户设置数据
     USER_SETTINGS_PERSIST({ state }) {
-      localStorage.setItem(LS_PICX_SETTINGS, JSON.stringify(state.userSettings))
+      setLocal(LS_SETTINGS, state.userSettings)
+    },
+
+    // 持久化全局设置数据
+    USER_GLOBAL_PERSIST({ state }) {
+      setSession(SS_GLOBAL_SETTINGS, state.globalSettings)
     },
 
     // 退出登录
@@ -205,7 +202,9 @@ const userSettingsModule: Module<UserSettingsStateTypes, RootStateTypes> = {
   },
 
   getters: {
-    getUserSettings: (state): UserSettingsModel => state.userSettings
+    getUserSettings: (state) => state.userSettings,
+    getCloudSettings: (state) => state.cloudSettings,
+    getGlobalSettings: (state) => state.globalSettings
   }
 }
 

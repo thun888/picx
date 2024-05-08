@@ -40,24 +40,21 @@ export enum LanguageEnum {
 
 export interface UserSettingsModel {
   imageName: {
-    autoAddHash: boolean
-    prefixNaming: {
+    enableHash: boolean
+    addPrefix: {
       enable: boolean
       prefix: string
     }
-    autoTimestampNaming: boolean
-  }
-  theme: {
-    mode: ThemeModeEnum
   }
   compress: {
     enable: boolean
     encoder: CompressEncoderEnum
   }
-  elementPlusSize: ElementPlusSizeEnum
   imageLinkType: {
     selected: string
-    presetList: Array<ImageLinkRuleModel>
+    presetList: {
+      [key: string]: ImageLinkRuleModel
+    }
   }
   imageLinkFormat: {
     enable: boolean
@@ -73,5 +70,5 @@ export interface UserSettingsModel {
     textColor: string
     opacity: number
   }
-  language: LanguageEnum
+  showAnnouncement?: boolean
 }

@@ -3,14 +3,7 @@
     <!-- 左侧 / 上传图片列表 -->
     <div
       class="upload-page-left page-container"
-      v-if="
-        uploadImageList.length &&
-        (userSettings.elementPlusSize === ElementPlusSizeEnum.large ||
-          userSettings.elementPlusSize === ElementPlusSizeEnum.default)
-      "
-      :style="{
-        width: '300rem'
-      }"
+      v-if="uploadImageList.length && globalSettings!.elementPlusSize !== ElementPlusSizeEnum.small"
     >
       <div class="uploaded-item" v-for="(item, index) in uploadImageList" :key="index + item.uuid">
         <upload-image-card :img-obj="item" @remove="remove($event)" />
@@ -22,11 +15,7 @@
       <!-- 选择图片区域 -->
       <div class="row-item">
         <div class="content-box">
-          <getting-images
-            :disabled="uploading"
-            ref="gettingImagesRef"
-            @getImgList="setImgList"
-          ></getting-images>
+          <getting-images :disabled="uploading" ref="gettingImagesRef" @getImgList="setImgList" />
         </div>
       </div>
 
@@ -34,24 +23,31 @@
       <div class="row-item">
         <div class="content-box upload-area-status">
           <selected-info-bar />
-          <div v-if="uploadImageList.length">
-            {{ $t('upload.uploaded') }}：{{
+          <span class="upload-count" v-if="uploadImageList.length">
+            {{ $t('uploaded') }}：{{
               uploadImageList.filter((x) => x.uploadStatus.progress === 100).length
             }}
             /
             {{ uploadImageList.length }}
-          </div>
+          </span>
         </div>
       </div>
 
-      <!-- 重置 & 上传 -->
+      <!-- 部署 -->
+      <div class="row-item" v-if="userConfigInfo.logined">
+        <div class="content-box">
+          <deploy-status-bar :disabled="!isCanDeploy" />
+        </div>
+      </div>
+
+      <!-- 重置 & 上传   -->
       <div class="row-item" v-if="uploadImageList.length">
-        <div class="content-box" style="text-align: right">
+        <div class="content-box operation-btn">
           <el-button :disabled="uploading" plain type="warning" @click="resetUploadInfo">
-            {{ $t('reset') }} <span class="shortcut-key">[ {{ shortcutKey }} + A ]</span>
+            {{ $t('reset') }} <span class="shortcut-key">{{ shortcutKey }} A</span>
           </el-button>
           <el-button :disabled="uploading" plain type="primary" @click="uploadImage">
-            {{ $t('upload.upload') }} <span class="shortcut-key">[ {{ shortcutKey }} + S ]</span>
+            {{ $t('upload') }} <span class="shortcut-key">{{ shortcutKey }} S</span>
           </el-button>
         </div>
       </div>
@@ -61,8 +57,8 @@
 
 <script lang="ts" setup>
 import { computed, watch, ref, Ref, onMounted, getCurrentInstance } from 'vue'
-import { useRouter } from 'vue-router'
-import { useStore } from '@/stores'
+import { store } from '@/stores'
+import router from '@/router'
 import {
   ElementPlusSizeEnum,
   UploadedImageModel,
@@ -70,23 +66,24 @@ import {
   UploadStatusEnum
 } from '@/common/model'
 import { batchCopyImageLinks, copyImageLink, getOSName } from '@/utils'
-import { generateUploadImageObject, starred } from './upload-image.util'
+import { generateUploadImageObject } from './upload-image.util'
 import { uploadImagesToGitHub, uploadImageToGitHub } from '@/utils/upload-utils'
 import UploadImageCard from './components/upload-image-card/upload-image-card.vue'
+import SelectedInfoBar from '@/views/upload-image/components/dir-info-bar/dir-info-bar.vue'
 
-const store = useStore()
-const router = useRouter()
 const instance = getCurrentInstance()
 
 const gettingImagesRef: Ref = ref<null | HTMLElement>(null)
 
 const userConfigInfo = computed(() => store.getters.getUserConfigInfo).value
-const userSettings = computed(() => store.getters.getUserSettings).value
+const globalSettings = computed(() => store.getters.getGlobalSettings).value
 const logoutStatus = computed(() => store.getters.getUserLoginStatus)
 
 const uploadImageList = ref<UploadImageModel[]>([])
 const uploading = ref(false)
-const shortcutKey = computed(() => (getOSName() === 'mac' ? 'Command' : 'Ctrl'))
+const shortcutKey = computed(() => (getOSName() === 'mac' ? '⌘' : 'Ctrl'))
+
+const isCanDeploy = ref(false)
 
 const setImgList = (imgList: any[]) => {
   imgList.forEach((v) => {
@@ -124,34 +121,33 @@ const afterUploadSuccess = async (uploadedImg: UploadedImageModel[], isBatch: bo
   resetGettingImages()
   // 自动复制图片链接到系统剪贴板
   if (isBatch) {
-    batchCopyImageLinks(uploadedImg, userConfigInfo, userSettings, true)
+    batchCopyImageLinks(uploadedImg, true)
   } else {
-    copyImageLink(uploadedImg[0], userConfigInfo, userSettings, true)
+    copyImageLink(uploadedImg[0], true)
   }
   await store.dispatch('SET_USER_CONFIG_INFO', {
     viewDir: userConfigInfo.selectedDir
   })
-  await starred(userSettings)
 }
 
 // 上传
 const uploadImage = async () => {
-  const { token, selectedRepo, selectedDir } = userConfigInfo
+  const { token, repo, selectedDir } = userConfigInfo
 
   if (!token) {
-    ElMessage.error({ message: instance?.proxy?.$t('upload.message1') })
+    ElMessage.error({ message: instance?.proxy?.$t('upload_page.message1') })
     await router.push('/config')
     return
   }
 
-  if (!selectedRepo) {
-    ElMessage.error({ message: instance?.proxy?.$t('upload.message2') })
+  if (!repo) {
+    ElMessage.error({ message: instance?.proxy?.$t('upload_page.message2') })
     await router.push('/config')
     return
   }
 
   if (!selectedDir) {
-    ElMessage.error({ message: instance?.proxy?.$t('upload.message3') })
+    ElMessage.error({ message: instance?.proxy?.$t('upload_page.message3') })
     await router.push('/config')
     return
   }
@@ -159,7 +155,7 @@ const uploadImage = async () => {
   const notYetUploadList = uploadImageList.value.filter((x) => x.uploadStatus.progress === 0)
 
   if (notYetUploadList.length === 0) {
-    ElMessage.error({ message: instance?.proxy?.$t('upload.message4') })
+    ElMessage.error({ message: instance?.proxy?.$t('upload_page.message4') })
     return
   }
 
@@ -173,25 +169,26 @@ const uploadImage = async () => {
   switch (uploadRes) {
     // 单张图片上传成功
     case UploadStatusEnum.uploaded:
-      ElMessage.success({ message: instance?.proxy?.$t('upload.message5') })
+      ElMessage.success({ message: instance?.proxy?.$t('upload_page.message5') })
       await afterUploadSuccess(uploadedImg)
       break
 
     // 多张图片上传成功
     case UploadStatusEnum.allUploaded:
-      ElMessage.success({ message: instance?.proxy?.$t('upload.message6') })
+      ElMessage.success({ message: instance?.proxy?.$t('upload_page.message6') })
       await afterUploadSuccess(uploadedImg, true)
       break
 
     // 上传失败（网络错误等原因）
     case UploadStatusEnum.uploadFail:
-      ElMessage.error({ message: instance?.proxy?.$t('upload.message7') })
+      ElMessage.error({ message: instance?.proxy?.$t('upload_page.message7') })
   }
 }
 
 // 重置
 const resetUploadInfo = () => {
   uploading.value = false
+  isCanDeploy.value = false
   store.dispatch('UPLOAD_IMG_LIST_RESET')
   resetGettingImages()
 }
@@ -213,8 +210,9 @@ watch(
 
 watch(
   () => store.state.uploadImageListModule.uploadImageList,
-  (newValue) => {
-    uploadImageList.value = newValue
+  (nv) => {
+    uploadImageList.value = nv
+    isCanDeploy.value = uploadImageList.value.some((x) => x.uploadStatus.progress === 100)
   },
   {
     immediate: true,
